@@ -1,0 +1,7 @@
+bin/
+obj/
+.vs/
+*.user
+*.pdb
+artifacts/
+icon-preview.png
