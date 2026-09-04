@@ -37,6 +37,6 @@ iscc installer.iss
 
 ## 图标
 
-应用图标采用 Microsoft Fluent UI System Icons 的 `Lock Closed 48 Color`，依据 MIT License 使用，详见 `THIRD-PARTY-NOTICES.md`。
+应用图标由项目提供的高分辨率蓝紫渐变锁图制作。ICO 内含 16、20、24、32、48、64、128 和 256 px 八种独立采样尺寸，并保留透明 Alpha 抗锯齿边缘。
 
 本项目参考 FluentFlyout 的功能行为并遵循 GPL-3.0-or-later。

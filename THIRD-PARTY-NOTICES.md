@@ -1,7 +1,5 @@
-# Third-party notices
+# Asset notices
 
-The application icon is derived from Microsoft Fluent UI System Icons,
-`Lock Closed 48 Color`.
-
-Copyright (c) 2020 Microsoft Corporation. Licensed under the MIT License.
-Source: https://github.com/microsoft/fluentui-system-icons
+The blue-purple lock application icon is based on artwork supplied for this
+project. It is stored as a high-resolution PNG master and a multi-resolution
+Windows ICO containing 16, 20, 24, 32, 48, 64, 128, and 256 pixel variants.
