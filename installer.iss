@@ -1,5 +1,5 @@
 #define MyAppName "LockKeyFlyout"
-#define MyAppVersion "1.0.7"
+#define MyAppVersion "1.0.8"
 #define MyAppPublisher "LockKeyFlyout Contributors"
 #define MyAppExeName "LockKeyFlyout.exe"
 
@@ -13,7 +13,7 @@ DisableDirPage=no
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=..\..\outputs
-OutputBaseFilename=LockKeyFlyout-Setup-1.0.7-x64
+OutputBaseFilename=LockKeyFlyout-Setup-1.0.8-x64
 SetupIconFile=assets\LockKeyFlyout.ico
 Compression=lzma2/max
 SolidCompression=yes
@@ -31,6 +31,7 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 
 [Files]
 Source: "..\..\outputs\LockKeyFlyout-acrylic-portable\LockKeyFlyout.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\outputs\LockKeyFlyout-acrylic-portable\Register-StartupTask.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "default-settings.ini"; DestDir: "{localappdata}\LockKeyFlyout"; DestName: "settings.ini"; Flags: onlyifdoesntexist
 Source: "THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 
@@ -40,12 +41,12 @@ Name: "{group}\卸载 LockKeyFlyout"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\LockKeyFlyout"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{sys}\schtasks.exe"; Parameters: "/Create /F /TN ""LockKeyFlyout"" /SC ONLOGON /RL HIGHEST /TR """"{app}\{#MyAppExeName}"""""; Flags: runhidden waituntilterminated
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\Register-StartupTask.ps1"" -Install -Executable ""{app}\{#MyAppExeName}"""; Flags: runhidden waituntilterminated
 Filename: "{sys}\schtasks.exe"; Parameters: "/Run /TN ""LockKeyFlyout"""; Description: "以管理员权限启动 LockKeyFlyout"; Flags: runhidden postinstall skipifsilent waituntilterminated
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM {#MyAppExeName}"; Flags: runhidden; RunOnceId: "StopLockKeyFlyout"
-Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /F /TN ""LockKeyFlyout"""; Flags: runhidden; RunOnceId: "DeleteLockKeyFlyoutTask"
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\Register-StartupTask.ps1"" -Remove"; Flags: runhidden; RunOnceId: "DeleteLockKeyFlyoutTask"
 
 [Code]
 function InitializeSetup(): Boolean;

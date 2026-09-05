@@ -113,9 +113,13 @@ internal sealed class Config
         // the integrity level without showing UAC on every sign-in.
         using(var key=Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run"))key.DeleteValue("LockKeyFlyout",false);
         string exe=Environment.ProcessPath??throw new InvalidOperationException("无法确定程序路径");
+        string script=Path.Combine(AppContext.BaseDirectory,"Register-StartupTask.ps1");
+        if(!File.Exists(script))throw new FileNotFoundException("缺少自启动注册脚本",script);
+        string quotedScript=$"\"{script}\"",quotedExe=$"\"{exe}\"";
         string args=Startup
-            ? $"/Create /F /TN \"LockKeyFlyout\" /SC ONLOGON /RL HIGHEST /TR \"\\\"{exe}\\\"\""
-            : "/Delete /F /TN \"LockKeyFlyout\"";
-        using var p=Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory,"schtasks.exe"),args){UseShellExecute=false,CreateNoWindow=true});p?.WaitForExit(5000);
+            ? $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -File {quotedScript} -Install -Executable {quotedExe}"
+            : $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -File {quotedScript} -Remove";
+        using var p=Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory,@"WindowsPowerShell\v1.0\powershell.exe"),args){UseShellExecute=false,CreateNoWindow=true});
+        if(p is null||!p.WaitForExit(10000)||p.ExitCode!=0)throw new InvalidOperationException("注册开机自启动失败");
     }
 }
