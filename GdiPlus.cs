@@ -14,7 +14,7 @@ internal static unsafe class GdiPlus
     public static void Stop(){if(token!=0)GdiplusShutdown(token);}
     public static void Draw(nint hdc,int dpi,bool locked,float barProgress,int clientWidth,int clientHeight,string text,bool bold)
     {
-        if(token==0)return;nint g;GdipCreateFromHDC(hdc,out g);GdipSetSmoothingMode(g,4);GdipSetPixelOffsetMode(g,4);GdipSetCompositingQuality(g,4);GdipSetTextRenderingHint(g,3);
+        if(token==0)return;nint g;GdipCreateFromHDC(hdc,out g);GdipSetSmoothingMode(g,4);GdipSetPixelOffsetMode(g,4);GdipSetCompositingQuality(g,4);GdipSetTextRenderingHint(g,5);
         float s=dpi/96f,ox=14*s,oy=14*s,vs=22f/24f*s;
         nint white,pen;GdipCreateSolidFill(0xffffffff,out white);GdipCreatePen1(0xffffffff,1.5f*vs,2,out pen);
 
