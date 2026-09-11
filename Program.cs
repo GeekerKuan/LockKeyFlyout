@@ -14,12 +14,11 @@ internal static unsafe class Program
     const int TPM_RIGHTBUTTON=2, TPM_BOTTOMALIGN=0x20, MF_STRING=0, MF_SEPARATOR=0x800;
     const int NIM_ADD=0, NIM_MODIFY=1, NIM_DELETE=2, NIF_MESSAGE=1, NIF_ICON=2, NIF_TIP=4;
     const int VK_CAPITAL=0x14, VK_INSERT=0x2D, VK_NUMLOCK=0x90, VK_SCROLL=0x91;
-    const int ID_SETTINGS=1001, ID_EXIT=1002, ID_ENABLE=1003, TRAY_MSG=WM_APP+1, TIMER_HIDE=1;
-    const uint AW_HIDE=0x10000, AW_SLIDE=0x40000, AW_VER_POSITIVE=0x4, AW_VER_NEGATIVE=0x8;
+    const int ID_SETTINGS=1001, ID_EXIT=1002, ID_ENABLE=1003, TRAY_MSG=WM_APP+1, TIMER_HIDE=1, TIMER_MOTION=2;
     const int DWMWA_WINDOW_CORNER_PREFERENCE=33, DWMWCP_ROUND=2;
     static nint instance, host, flyout, settings, hook, trayMenu,appIcon;
     static Native.WndProc? wndProc; static Native.HookProc? hookProc;
-    static Config cfg=Config.Load(); static string message=""; static bool state,flyoutVisible; static float barProgress;
+    static Config cfg=Config.Load(); static string message=""; static bool state,flyoutVisible; static float barProgress; static int finalX,finalY,motionFromY,motionMode; static long motionStarted;
     static readonly string MutexName="Local\\LockKeyFlyout.Singleton";
 
     [STAThread] static int Main()
@@ -64,7 +63,7 @@ internal static unsafe class Program
         case WM_HOTKEY: ShowKey((int)wp); return 0;
         case TRAY_MSG: if((int)lp==0x205){Native.POINT p;Native.GetCursorPos(&p);Native.SetForegroundWindow(host);Native.TrackPopupMenu(trayMenu,TPM_RIGHTBUTTON|TPM_BOTTOMALIGN,p.x,p.y,0,host,0);} else if((int)lp==0x203)ShowSettings(); return 0;
         case WM_COMMAND: switch((int)(wp&0xffff)){case ID_SETTINGS:ShowSettings();break;case ID_ENABLE:cfg.Enabled=!cfg.Enabled;cfg.Save();RebuildMenu();break;case ID_EXIT:Native.DestroyWindow(host);break;case 2011:ReadSettings();Native.DestroyWindow(settings);settings=0;break;} return 0;
-        case WM_TIMER: if((int)wp==TIMER_HIDE){Native.KillTimer(flyout,TIMER_HIDE);if(flyoutVisible){if(cfg.Animate)Native.AnimateWindow(flyout,145,AW_HIDE|AW_SLIDE|AW_VER_POSITIVE);else Native.ShowWindow(flyout,SW_HIDE);DisableAcrylic();flyoutVisible=false;}}return 0;
+        case WM_TIMER:if((int)wp==TIMER_HIDE){Native.KillTimer(flyout,TIMER_HIDE);if(flyoutVisible){if(cfg.Animate){motionMode=2;motionStarted=Environment.TickCount64;Native.SetTimer(flyout,TIMER_MOTION,10,0);}else HideFlyout();}}else if((int)wp==TIMER_MOTION)TickMotion();return 0;
         case WM_PAINT:if(hwnd==flyout){PaintFlyout();return 0;}break;
         case WM_CLOSE:if(hwnd==settings){ReadSettings();Native.DestroyWindow(settings);settings=0;return 0;}break;
         case WM_DESTROY:if(hwnd==host){if(hook!=0)Native.UnhookWindowsHookEx(hook);RemoveTray();Native.PostQuitMessage(0);}return 0;
@@ -76,11 +75,18 @@ internal static unsafe class Program
         state=vk==VK_INSERT||((Native.GetKeyState(vk)&1)!=0); message=vk switch{VK_CAPITAL=>"大写锁定 ",VK_NUMLOCK=>"数字锁定 ",VK_SCROLL=>"滚动锁定 ",_=>"Insert 键已按下"};if(vk!=VK_INSERT)message+=state?"开启":"关闭";
         Native.POINT pt;Native.GetCursorPos(&pt);nint mon=cfg.MonitorMode==2?Native.MonitorFromPoint(pt,2):cfg.MonitorMode==1?Native.MonitorFromWindow(Native.GetForegroundWindow(),2):Native.MonitorFromWindow(host,1);
         Native.MONITORINFO mi=new(){cbSize=(uint)sizeof(Native.MONITORINFO)};Native.GetMonitorInfo(mon,&mi);uint dpiX=96,dpiY=96;try{Native.GetDpiForMonitor(mon,0,out dpiX,out dpiY);}catch{}int dpi=(int)dpiX;int w=Mul(160,dpi),h=Mul(50,dpi);int x=mi.rcWork.left+(mi.rcWork.right-mi.rcWork.left-w)/2,y=mi.rcWork.bottom-h-Mul(16,dpi);
-        barProgress=state?1f:0f;EnableAcrylic();Native.SetWindowRgn(flyout,Native.CreateRoundRectRgn(0,0,w+1,h+1,Mul(11,dpi),Mul(11,dpi)),true);Native.KillTimer(flyout,TIMER_HIDE);
+        barProgress=state?1f:0f;finalX=x;finalY=y;EnableAcrylic();Native.SetWindowRgn(flyout,Native.CreateRoundRectRgn(0,0,w+1,h+1,Mul(11,dpi),Mul(11,dpi)),true);Native.KillTimer(flyout,TIMER_HIDE);Native.KillTimer(flyout,TIMER_MOTION);
         Native.SetWindowPos(flyout,(nint)(-1),x,y,w,h,0x10|0x40);Native.InvalidateRect(flyout,0,false);Native.UpdateWindow(flyout);
-        if(!flyoutVisible){flyoutVisible=true;if(cfg.Animate)Native.AnimateWindow(flyout,220,AW_SLIDE|AW_VER_NEGATIVE);else Native.ShowWindow(flyout,SW_SHOWNOACTIVATE);}
+        if(!flyoutVisible){flyoutVisible=true;if(cfg.Animate){motionFromY=y+Mul(20,dpi);Native.SetWindowPos(flyout,(nint)(-1),x,motionFromY,0,0,0x1|0x10|0x40);Native.ShowWindow(flyout,SW_SHOWNOACTIVATE);motionMode=1;motionStarted=Environment.TickCount64;Native.SetTimer(flyout,TIMER_MOTION,10,0);}else Native.ShowWindow(flyout,SW_SHOWNOACTIVATE);}
         Native.SetTimer(flyout,TIMER_HIDE,(uint)cfg.Duration,0);
     }
+    static void TickMotion()
+    {
+        long elapsed=Environment.TickCount64-motionStarted;
+        if(motionMode==1){double t=Math.Clamp(elapsed/280.0,0,1),u=t-1,c1=1.25,c3=c1+1,e=1+c3*u*u*u+c1*u*u;int y=(int)Math.Round(motionFromY+(finalY-motionFromY)*e);Native.SetWindowPos(flyout,(nint)(-1),finalX,y,0,0,0x1|0x10|0x40);if(t>=1){Native.KillTimer(flyout,TIMER_MOTION);motionMode=0;Native.SetWindowPos(flyout,(nint)(-1),finalX,finalY,0,0,0x1|0x10|0x40);}}
+        else if(motionMode==2){double t=Math.Clamp(elapsed/155.0,0,1),e=t*t*t;int y=finalY+(int)Math.Round(Mul(10,(int)Native.GetDpiForWindow(flyout))*e);Native.SetWindowPos(flyout,(nint)(-1),finalX,y,0,0,0x1|0x10|0x40);if(t>=1)HideFlyout();}
+    }
+    static void HideFlyout(){Native.KillTimer(flyout,TIMER_MOTION);Native.ShowWindow(flyout,SW_HIDE);DisableAcrylic();flyoutVisible=false;motionMode=0;}
     static int Mul(int n,int dpi)=>n*dpi/96;
     static void PaintFlyout()
     {
