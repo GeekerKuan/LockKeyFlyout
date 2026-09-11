@@ -1,5 +1,5 @@
 #define MyAppName "LockKeyFlyout"
-#define MyAppVersion "1.0.8"
+#define MyAppVersion "1.0.9"
 #define MyAppPublisher "LockKeyFlyout Contributors"
 #define MyAppExeName "LockKeyFlyout.exe"
 
@@ -13,7 +13,7 @@ DisableDirPage=no
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=..\..\outputs
-OutputBaseFilename=LockKeyFlyout-Setup-1.0.8-x64
+OutputBaseFilename=LockKeyFlyout-Setup-1.0.9-x64
 SetupIconFile=assets\LockKeyFlyout.ico
 Compression=lzma2/max
 SolidCompression=yes

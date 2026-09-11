@@ -9,9 +9,9 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <AssemblyName>LockKeyFlyout</AssemblyName>
     <RootNamespace>LockKeyFlyout</RootNamespace>
-    <Version>1.0.8</Version>
-    <FileVersion>1.0.8.0</FileVersion>
-    <AssemblyVersion>1.0.8.0</AssemblyVersion>
+    <Version>1.0.9</Version>
+    <FileVersion>1.0.9.0</FileVersion>
+    <AssemblyVersion>1.0.9.0</AssemblyVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>assets\LockKeyFlyout.ico</ApplicationIcon>
   </PropertyGroup>

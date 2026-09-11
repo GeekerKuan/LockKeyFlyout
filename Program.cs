@@ -18,7 +18,7 @@ internal static unsafe class Program
     const int DWMWA_WINDOW_CORNER_PREFERENCE=33, DWMWCP_ROUND=2;
     static nint instance, host, flyout, settings, hook, trayMenu,appIcon;
     static Native.WndProc? wndProc; static Native.HookProc? hookProc;
-    static Config cfg=Config.Load(); static string message=""; static bool state,hiding; static byte alpha; static long shownAt;
+    static Config cfg=Config.Load(); static string message=""; static bool state,flyoutVisible,hiding; static byte alpha; static long animationStarted,barStarted; static int finalX,finalY,entryY; static float barFrom,barTo,barProgress;
     static readonly string MutexName="Local\\LockKeyFlyout.Singleton";
 
     [STAThread] static int Main()
@@ -63,7 +63,7 @@ internal static unsafe class Program
         case WM_HOTKEY: ShowKey((int)wp); return 0;
         case TRAY_MSG: if((int)lp==0x205){Native.POINT p;Native.GetCursorPos(&p);Native.SetForegroundWindow(host);Native.TrackPopupMenu(trayMenu,TPM_RIGHTBUTTON|TPM_BOTTOMALIGN,p.x,p.y,0,host,0);} else if((int)lp==0x203)ShowSettings(); return 0;
         case WM_COMMAND: switch((int)(wp&0xffff)){case ID_SETTINGS:ShowSettings();break;case ID_ENABLE:cfg.Enabled=!cfg.Enabled;cfg.Save();RebuildMenu();break;case ID_EXIT:Native.DestroyWindow(host);break;case 2011:ReadSettings();Native.DestroyWindow(settings);settings=0;break;} return 0;
-        case WM_TIMER: if((int)wp==TIMER_HIDE){Native.KillTimer(flyout,TIMER_HIDE);hiding=true;Native.SetTimer(flyout,TIMER_ANIM,16,0);}else if((int)wp==TIMER_ANIM){alpha=(byte)(hiding?Math.Max(0,alpha-30):Math.Min(255,alpha+32));Native.SetLayeredWindowAttributes(flyout,0,alpha,LWA_ALPHA);if(hiding&&alpha==0){Native.KillTimer(flyout,TIMER_ANIM);Native.ShowWindow(flyout,SW_HIDE);DisableAcrylic();}else if(!hiding&&alpha==255){Native.KillTimer(flyout,TIMER_ANIM);Native.SetTimer(flyout,TIMER_HIDE,(uint)Math.Max(100,cfg.Duration-(Environment.TickCount64-shownAt)),0);}}return 0;
+        case WM_TIMER: if((int)wp==TIMER_HIDE){Native.KillTimer(flyout,TIMER_HIDE);hiding=true;animationStarted=Environment.TickCount64;Native.SetTimer(flyout,TIMER_ANIM,15,0);}else if((int)wp==TIMER_ANIM)TickAnimation();return 0;
         case WM_PAINT:if(hwnd==flyout){PaintFlyout();return 0;}break;
         case WM_CLOSE:if(hwnd==settings){ReadSettings();Native.DestroyWindow(settings);settings=0;return 0;}break;
         case WM_DESTROY:if(hwnd==host){if(hook!=0)Native.UnhookWindowsHookEx(hook);RemoveTray();Native.PostQuitMessage(0);}return 0;
@@ -75,16 +75,26 @@ internal static unsafe class Program
         state=vk==VK_INSERT||((Native.GetKeyState(vk)&1)!=0); message=vk switch{VK_CAPITAL=>"大写锁定 ",VK_NUMLOCK=>"数字锁定 ",VK_SCROLL=>"滚动锁定 ",_=>"Insert 键已按下"};if(vk!=VK_INSERT)message+=state?"开启":"关闭";
         Native.POINT pt;Native.GetCursorPos(&pt);nint mon=cfg.MonitorMode==2?Native.MonitorFromPoint(pt,2):cfg.MonitorMode==1?Native.MonitorFromWindow(Native.GetForegroundWindow(),2):Native.MonitorFromWindow(host,1);
         Native.MONITORINFO mi=new(){cbSize=(uint)sizeof(Native.MONITORINFO)};Native.GetMonitorInfo(mon,&mi);uint dpiX=96,dpiY=96;try{Native.GetDpiForMonitor(mon,0,out dpiX,out dpiY);}catch{}int dpi=(int)dpiX;int w=Mul(160,dpi),h=Mul(50,dpi);int x=mi.rcWork.left+(mi.rcWork.right-mi.rcWork.left-w)/2,y=mi.rcWork.bottom-h-Mul(16,dpi);
-        alpha=cfg.Animate?(byte)40:(byte)255;hiding=false;shownAt=Environment.TickCount64;EnableAcrylic();Native.SetLayeredWindowAttributes(flyout,0,alpha,LWA_ALPHA);Native.SetWindowPos(flyout,(nint)(-1),x,y,w,h,0x10|0x40);Native.SetWindowRgn(flyout,Native.CreateRoundRectRgn(0,0,w+1,h+1,Mul(11,dpi),Mul(11,dpi)),true);Native.ShowWindow(flyout,SW_SHOWNOACTIVATE);Native.InvalidateRect(flyout,0,true);Native.KillTimer(flyout,TIMER_HIDE);Native.KillTimer(flyout,TIMER_ANIM);
-        if(cfg.Animate)Native.SetTimer(flyout,TIMER_ANIM,16,0);else Native.SetTimer(flyout,TIMER_HIDE,(uint)cfg.Duration,0);
+        long now=Environment.TickCount64;barFrom=barProgress;barTo=state?1f:0f;barStarted=now;finalX=x;finalY=y;entryY=y+Mul(20,dpi);hiding=false;EnableAcrylic();Native.SetWindowRgn(flyout,Native.CreateRoundRectRgn(0,0,w+1,h+1,Mul(11,dpi),Mul(11,dpi)),true);
+        Native.KillTimer(flyout,TIMER_HIDE);Native.KillTimer(flyout,TIMER_ANIM);
+        if(!flyoutVisible){flyoutVisible=true;animationStarted=now;alpha=cfg.Animate?(byte)0:(byte)255;Native.SetLayeredWindowAttributes(flyout,0,alpha,LWA_ALPHA);Native.SetWindowPos(flyout,(nint)(-1),x,cfg.Animate?entryY:y,w,h,0x10|0x40);Native.ShowWindow(flyout,SW_SHOWNOACTIVATE);}else{alpha=255;Native.SetLayeredWindowAttributes(flyout,0,alpha,LWA_ALPHA);Native.SetWindowPos(flyout,(nint)(-1),x,y,w,h,0x10|0x40);}
+        if(cfg.Animate)Native.SetTimer(flyout,TIMER_ANIM,15,0);
+        Native.InvalidateRect(flyout,0,true);Native.SetTimer(flyout,TIMER_HIDE,(uint)cfg.Duration,0);
+    }
+    static void TickAnimation()
+    {
+        long now=Environment.TickCount64;float barT=Math.Clamp((now-barStarted)/200f,0f,1f);float nextBar=barFrom+(barTo-barFrom)*barT;bool redraw=Math.Abs(nextBar-barProgress)>.001f;barProgress=nextBar;
+        float t=Math.Clamp((now-animationStarted)/200f,0f,1f);
+        if(hiding){alpha=(byte)Math.Round(255*(1-t));Native.SetLayeredWindowAttributes(flyout,0,alpha,LWA_ALPHA);Native.SetWindowPos(flyout,(nint)(-1),finalX,finalY+(int)(Mul(8,(int)Native.GetDpiForWindow(flyout))*t),0,0,0x1|0x4|0x10|0x40);if(t>=1){Native.KillTimer(flyout,TIMER_ANIM);Native.ShowWindow(flyout,SW_HIDE);DisableAcrylic();flyoutVisible=false;}}
+        else if(cfg.Animate){alpha=(byte)Math.Round(255*t);Native.SetLayeredWindowAttributes(flyout,0,alpha,LWA_ALPHA);Native.SetWindowPos(flyout,(nint)(-1),finalX,(int)Math.Round(entryY+(finalY-entryY)*t),0,0,0x1|0x4|0x10|0x40);if(t>=1&&barT>=1)Native.KillTimer(flyout,TIMER_ANIM);}
+        if(redraw)Native.InvalidateRect(flyout,0,false);
     }
     static int Mul(int n,int dpi)=>n*dpi/96;
     static void PaintFlyout()
     {
         Native.PAINTSTRUCT ps; nint dc=Native.BeginPaint(flyout,&ps);Native.RECT r;Native.GetClientRect(flyout,&r);int dpi=(int)Native.GetDpiForWindow(flyout);Native.PatBlt(dc,0,0,r.right,r.bottom,0x00000042);
         nint brush=Native.GetStockObject(5),border=Native.CreatePen(0,Mul(1,dpi),0x00505050),oldPen=Native.SelectObject(dc,border),oldBrush=Native.SelectObject(dc,brush);Native.RoundRect(dc,0,0,r.right-1,r.bottom-1,Mul(11,dpi),Mul(11,dpi));Native.SelectObject(dc,oldPen);Native.SelectObject(dc,oldBrush);Native.DeleteObject(border);
-        Native.SetBkMode(dc,1);Native.SetTextColor(dc,0x00ffffff);
-        nint textFont=Native.CreateFont(-Mul(14,dpi),0,0,0,cfg.Bold?500:400,0,0,0,1,0,0,6,0,"Segoe UI");nint previousFont=Native.SelectObject(dc,textFont);Native.RECT text=new(){left=Mul(20,dpi),top=Mul(6,dpi),right=r.right,bottom=r.bottom-Mul(10,dpi)};Native.DrawText(dc,message,-1,&text,0x25);Native.SelectObject(dc,previousFont);Native.DeleteObject(textFont);GdiPlus.Draw(dc,dpi,state,r.right,r.bottom);Native.EndPaint(flyout,&ps);
+        GdiPlus.Draw(dc,dpi,state,barProgress,r.right,r.bottom,message,cfg.Bold);Native.EndPaint(flyout,&ps);
     }
     static void AddTray(){Native.NOTIFYICONDATA d=TrayData();d.uFlags=NIF_MESSAGE|NIF_ICON|NIF_TIP;d.uCallbackMessage=TRAY_MSG;d.hIcon=appIcon;d.szTip="锁定键浮窗";Native.Shell_NotifyIcon(NIM_ADD,ref d);}
     static void RemoveTray(){Native.NOTIFYICONDATA d=TrayData();Native.Shell_NotifyIcon(NIM_DELETE,ref d);} static Native.NOTIFYICONDATA TrayData()=>new(){cbSize=(uint)Marshal.SizeOf<Native.NOTIFYICONDATA>(),hWnd=host,uID=1,szTip="",szInfo="",szInfoTitle=""};
